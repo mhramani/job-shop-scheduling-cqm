@@ -100,6 +100,44 @@ class JSSCQM():
                                 data.task_duration[(k, task_k)],
                                 label='OneJobj{}_j{}_m{}'.format(j, k, i))
 
+    def add_linear_overlap_constraint(self, data):
+        """Add linear constraints to ensure that no two jobs can be scheduled
+         on the same machine at the same time.
+
+         Args:
+             data: JSS data class
+        """
+
+        for j in range(data.num_jobs):
+            for k in range(data.num_jobs):
+                if j < k:
+                    for i in range(data.num_machines):
+                        task_k = data.machine_task[(k, i)]
+                        task_j = data.machine_task[(j, i)]
+                        if data.task_duration[k, task_k] > 0 and\
+                                data.task_duration[j, task_j] > 0:
+                            self.cqm.add_constraint(
+                                self.x[(j, i)] - self.x[(k, i)] +
+                                data.max_makespan * self.y[(j, k, i)]
+                                >=  data.task_duration[(k, task_k)],
+                                label='OneJob_linear_1_{}_j{}_m{}'.format(j, k, i))
+
+        for j in range(data.num_jobs):
+            for k in range(data.num_jobs):
+                if j < k:
+                    for i in range(data.num_machines):
+                        task_k = data.machine_task[(k, i)]
+                        task_j = data.machine_task[(j, i)]
+                        if data.task_duration[k, task_k] > 0 and\
+                                data.task_duration[j, task_j] > 0:
+                            self.cqm.add_constraint(
+                                self.x[(k, i)]  -  self.x[(j, i)] +
+                                data.max_makespan *  (1 - self.y[(j, k, i)])
+                                >=
+                                data.task_duration[(j, task_j)],
+                                label='OneJob_linear_2{}_j{}_m{}'.format(j, k, i))
+
+
     def add_makespan_constraint(self, data):
         """Ensures that the make span is at least the largest completion time of
         the last operation of all jobs.
@@ -173,12 +211,17 @@ if __name__ == "__main__":
                         help='path to the output plot file',
                         default='schedule.png')
 
+    parser.add_argument('-type', type=str,
+                        help='type of overlap constraint, linear or quadratic ',
+                        default='quadratic')
+
     # Parse input arguments.
     args = parser.parse_args()
     input_file = args.instance
     time_limit = args.tl
     out_plot_file = args.op
     out_sol_file = args.os
+    model_type = args.type
 
     # Define JSS data class
     jss_data = Data(input_file)
@@ -204,7 +247,12 @@ if __name__ == "__main__":
     model.add_precedence_constraints(jss_data)
 
     # Add constraint to enforce one job only on a machine.
-    model.add_quadratic_overlap_constraint(jss_data)
+    if model_type == 'quadratic':
+        model.add_quadratic_overlap_constraint(jss_data)
+    elif model_type == 'linear':
+        model.add_linear_overlap_constraint(jss_data)
+    else:
+        raise ValueError("model type is not supported")
 
     # Add make span constraints.
     model.add_makespan_constraint(jss_data)
